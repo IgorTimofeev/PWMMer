@@ -16,7 +16,7 @@ Encoder encoder {
 	constants::encoder::sw
 };
 
-Motor motor {
+Servo servo {
 	constants::signal,
 	LEDC_CHANNEL_0,
 	180,
@@ -25,10 +25,27 @@ Motor motor {
 	50
 };
 
+uint16_t angle = 90;
+bool angleMode = true;
+
+void updatePulseWidthRange() {
+	servo.setMaxPulseWidth(3000 - servo.getMinPulseWidth());
+
+	ESP_LOGI("Main", "updatePulseWidthRange(): %f - %f", (float) servo.getMinPulseWidth(), (float) servo.getMaxPulseWidth());
+}
+
+void updateAngle() {
+	servo.setAngle(angle);
+
+	ESP_LOGI("Main", "setAngle() angle: %f", (float) angle);
+}
+
 extern "C" void app_main(void) {
 	// Motor
-	motor.setup();
-	motor.setAngle(motor.getMaxAngle() / 2);
+	servo.setup();
+
+	updatePulseWidthRange();
+	updateAngle();
 
 	// Encoder
 	encoder.setup();
@@ -38,14 +55,34 @@ extern "C" void app_main(void) {
 		if (encoder.wasInterrupted()) {
 			encoder.acknowledgeInterrupt();
 
-			if (std::abs(encoder.getRotation()) > 3) {
-				motor.setAngle(static_cast<uint16_t>(std::clamp<int32_t>(
-					static_cast<int32_t>(motor.getAngle()) + (encoder.getRotation() > 0 ? 10 : -10),
-					0,
-					motor.getMaxAngle()
-				)));
+			if (encoder.isPressed()) {
+				angleMode = !angleMode;
 
-				encoder.setRotation(0);
+				ESP_LOGI("Main", "Mode: %s", angleMode ? "angle" : "pulse width");
+			}
+			else {
+				if (std::abs(encoder.getRotation()) > 3) {
+					if (angleMode) {
+						angle = static_cast<uint16_t>(std::clamp<int32_t>(
+							static_cast<int32_t>(angle) + (encoder.getRotation() > 0 ? 10 : -10),
+							0,
+							servo.getMaxAngle()
+						));
+
+						updateAngle();
+					}
+					else {
+						servo.setMinPulseWidth(static_cast<uint16_t>(std::clamp<int32_t>(
+							static_cast<int32_t>(servo.getMinPulseWidth()) + (encoder.getRotation() > 0 ? 50 : -50),
+							100,
+							1500 - 100
+						)));
+
+						updatePulseWidthRange();
+					}
+
+					encoder.setRotation(0);
+				}
 			}
 		}
 

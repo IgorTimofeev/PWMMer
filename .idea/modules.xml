@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/PWMmer.iml" filepath="$PROJECT_DIR$/.idea/PWMmer.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/PWMMer.iml" filepath="$PROJECT_DIR$/.idea/PWMMer.iml" />
     </modules>
   </component>
 </project>
