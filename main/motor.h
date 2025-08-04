@@ -66,7 +66,7 @@ namespace pizda {
 			void setPulse(const uint16_t valueUs) const {
 				const auto duty = valueUs * dutyResolutionMaxValue / (1'000'000 / frequencyHz);
 
-				ESP_LOGI("Motor", "setPulse() duty: %f", (float) duty);
+				// ESP_LOGI("Motor", "setPulse() duty: %f", (float) duty);
 
 				ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
 				ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
@@ -117,7 +117,7 @@ namespace pizda {
 			void setAngle(const uint16_t angle) const {
 				const auto pulse = getMinPulseWidth() + (getMaxPulseWidth() - getMinPulseWidth()) * angle / maxAngle;
 
-				ESP_LOGI("Motor", "setAngle() pulse: %f", (float) pulse);
+				// ESP_LOGI("Motor", "setAngle() pulse: %f", (float) pulse);
 
 				setPulse(pulse);
 			}

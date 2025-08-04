@@ -25,7 +25,7 @@ Servo servo {
 	50
 };
 
-uint16_t angle = 90;
+uint16_t angle = 0;
 bool angleMode = true;
 
 void updatePulseWidthRange() {
