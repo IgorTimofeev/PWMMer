@@ -16,36 +16,35 @@ Encoder encoder {
 	constants::encoder::sw
 };
 
-Servo servo {
+Motor motor {
 	constants::signal,
 	LEDC_CHANNEL_0,
-	180,
-	500,
-	2500,
+	1000,
+	2000,
 	50
 };
 
-uint16_t angle = 0;
-bool angleMode = true;
+uint8_t percent = 0;
+bool percentMode = true;
 
 void updatePulseWidthRange() {
-	servo.setMaxPulseWidth(3000 - servo.getMinPulseWidth());
+	motor.setMaxPulseWidth(3000 - motor.getMinPulseWidth());
 
-	ESP_LOGI("Main", "updatePulseWidthRange(): %f - %f", (float) servo.getMinPulseWidth(), (float) servo.getMaxPulseWidth());
+	ESP_LOGI("Main", "updatePulseWidthRange(): %f - %f", (float) motor.getMinPulseWidth(), (float) motor.getMaxPulseWidth());
 }
 
-void updateAngle() {
-	servo.setAngle(angle);
+void updatePercent() {
+	motor.setPercent(percent);
 
-	ESP_LOGI("Main", "setAngle() angle: %f", (float) angle);
+	ESP_LOGI("Main", "setPercent() percent: %f", (float) percent);
 }
 
 extern "C" void app_main(void) {
 	// Motor
-	servo.setup();
+	motor.setup();
 
 	updatePulseWidthRange();
-	updateAngle();
+	updatePercent();
 
 	// Encoder
 	encoder.setup();
@@ -56,24 +55,30 @@ extern "C" void app_main(void) {
 			encoder.acknowledgeInterrupt();
 
 			if (encoder.isPressed()) {
-				angleMode = !angleMode;
+				ESP_LOGI("Main", "Mode: %s", percentMode ? "percent" : "pulse width");
+				percentMode = !percentMode;
 
-				ESP_LOGI("Main", "Mode: %s", angleMode ? "angle" : "pulse width");
+				// ESP_LOGI("Main", "Calibrating");
+				//
+				// motor.setPulseWidth(motor.getMaxPulseWidth());
+				// vTaskDelay(pdMS_TO_TICKS(3'000));
+				//
+				// motor.setPulseWidth(motor.getMinPulseWidth());
 			}
 			else {
 				if (std::abs(encoder.getRotation()) > 3) {
-					if (angleMode) {
-						angle = static_cast<uint16_t>(std::clamp<int32_t>(
-							static_cast<int32_t>(angle) + (encoder.getRotation() > 0 ? 10 : -10),
+					if (percentMode) {
+						percent = static_cast<uint8_t>(std::clamp<int16_t>(
+							static_cast<int16_t>(percent + (encoder.getRotation() > 0 ? 5 : -5)),
 							0,
-							servo.getMaxAngle()
+							100
 						));
 
-						updateAngle();
+						updatePercent();
 					}
 					else {
-						servo.setMinPulseWidth(static_cast<uint16_t>(std::clamp<int32_t>(
-							static_cast<int32_t>(servo.getMinPulseWidth()) + (encoder.getRotation() > 0 ? 50 : -50),
+						motor.setMinPulseWidth(static_cast<uint16_t>(std::clamp<int32_t>(
+							static_cast<int32_t>(motor.getMinPulseWidth()) + (encoder.getRotation() > 0 ? 50 : -50),
 							100,
 							1500 - 100
 						)));

@@ -63,7 +63,7 @@ namespace pizda {
 				this->frequencyHz = frequencyHz;
 			}
 
-			void setPulse(const uint16_t valueUs) const {
+			void setPulseWidth(const uint16_t valueUs) const {
 				const auto duty = valueUs * dutyResolutionMaxValue / (1'000'000 / frequencyHz);
 
 				// ESP_LOGI("Motor", "setPulse() duty: %f", (float) duty);
@@ -72,6 +72,9 @@ namespace pizda {
 				ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
 			}
 
+			void setPercent(const uint8_t percent) const {
+				setPulseWidth(minPulseWidthUs + (maxPulseWidthUs - minPulseWidthUs) * percent / 100);
+			}
 
 		private:
 			gpio_num_t pin;
@@ -119,7 +122,7 @@ namespace pizda {
 
 				// ESP_LOGI("Motor", "setAngle() pulse: %f", (float) pulse);
 
-				setPulse(pulse);
+				setPulseWidth(pulse);
 			}
 
 		private:
