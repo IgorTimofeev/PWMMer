@@ -1,38 +1,26 @@
 #include <algorithm>
 #include <cmath>
+#include <format>
 
-#include "encoder.h"
 #include "esp_log.h"
-#include "constants.h"
-#include "encoder.h"
-#include "driver/ledc.h"
-#include "motor.h"
 
 #include <YOBA/main.h>
 #include <YOBA/UI.h>
 #include <YOBA/hardware/displays/SH1106Display.h>
 #include <YOBA/resources/fonts/PIXY10Font.h>
-#include <format>
+
+#include "constants.h"
+#include "driver/ledc.h"
+#include "motor.h"
+#include "encoder.h"
+#include "encoder.h"
+#include "settings.h"
 
 using namespace YOBA;
 using namespace pizda;
 
-// Display
-SH1106Display display {
-	constants::spi::mosi,
-	static_cast<uint8_t>(GPIO_NUM_NC),
-	constants::spi::clock,
-	constants::screen::slaveSelect,
-	constants::screen::dataCommand,
-	constants::screen::reset,
-	constants::screen::frequency
-};
-
-MonochromeRenderer renderer {};
-
-MonochromeColor colorB {false };
-MonochromeColor colorF {true };
-PIXY10Font font {};
+// Settings
+Settings settings {};
 
 // Encoder
 Encoder encoder {
@@ -50,17 +38,31 @@ Motor motor {
 	50
 };
 
-// Mode
-constexpr static uint16_t minPulseWidth = 10;
-constexpr static uint16_t maxPulseWidth = 1500 - minPulseWidth;
+// UI
+SH1106Display display {
+	constants::spi::mosi,
+	static_cast<uint8_t>(GPIO_NUM_NC),
+	constants::spi::clock,
+	constants::screen::slaveSelect,
+	constants::screen::dataCommand,
+	constants::screen::reset,
+	constants::screen::frequency
+};
 
+MonochromeRenderer renderer {};
+
+MonochromeColor colorB {false };
+MonochromeColor colorF {true };
+PIXY10Font font {};
+
+// Mode
 uint8_t percent = 0;
 bool percentMode = true;
 
 void updatePulseWidthRange() {
-	motor.setMaxPulseWidth(3000 - motor.getMinPulseWidth());
+	motor.setMaxPulseWidth(3000 - settings.minPulseWidth);
 
-	ESP_LOGI("Main", "updatePulseWidthRange(): %f - %f", (float) motor.getMinPulseWidth(), (float) motor.getMaxPulseWidth());
+	ESP_LOGI("Main", "updatePulseWidthRange(): %f - %f", (float) settings.minPulseWidth, (float) motor.getMaxPulseWidth());
 }
 
 void updatePercent() {
@@ -78,13 +80,6 @@ void encoderTick() {
 	if (encoder.isPressed()) {
 		ESP_LOGI("Main", "Mode: %s", percentMode ? "percent" : "pulse width");
 		percentMode = !percentMode;
-
-		// ESP_LOGI("Main", "Calibrating");
-		//
-		// motor.setPulseWidth(motor.getMaxPulseWidth());
-		// vTaskDelay(pdMS_TO_TICKS(3'000));
-		//
-		// motor.setPulseWidth(motor.getMinPulseWidth());
 	}
 	else {
 		const auto absRotation = std::abs(encoder.getRotation());
@@ -108,12 +103,15 @@ void encoderTick() {
 			else {
 				const auto magnitude = magnitudeBig ? 50 : 10;
 
-				motor.setMinPulseWidth(static_cast<uint16_t>(std::clamp<int32_t>(
-					static_cast<int32_t>(motor.getMinPulseWidth()) + (encoder.getRotation() > 0 ? magnitude : -magnitude),
-					minPulseWidth,
-					maxPulseWidth
-				)));
+				settings.minPulseWidth = static_cast<uint16_t>(std::clamp<int32_t>(
+					static_cast<int32_t>(settings.minPulseWidth) + (encoder.getRotation() > 0 ? magnitude : -magnitude),
+					10,
+					1500 - 10
+				));
 
+				settings.scheduleWrite();
+
+				motor.setMinPulseWidth(settings.minPulseWidth);
 				updatePulseWidthRange();
 			}
 
@@ -145,12 +143,12 @@ void displayTick() {
 		modeText = L"%";
 	}
 	else {
-		unitsMin = minPulseWidth;
-		unitsMax = maxPulseWidth;
+		unitsMin = 0;
+		unitsMax = 1500;
 		unitsStep0 = 10;
 		unitsStep1 = 50;
 		unitsStep2 = 100;
-		unitsValue = motor.getMinPulseWidth();
+		unitsValue = settings.minPulseWidth;
 		radPerUnit = toRadians(0.2f);
 		modeText = L"us";
 	}
@@ -190,13 +188,6 @@ void displayTick() {
 		triangleHeight + roseMarginTop + roseRadius
 	);
 
-	// Circle
-//	renderer.renderCircle(
-//		pivot,
-//		roseRadius,
-//		&colorF
-//	);
-
 	// Lines
 	for (uint16_t arrowValue = unitsMin; arrowValue <= unitsMax; arrowValue += unitsStep0) {
 		const auto isBig = arrowValue % unitsStep2 == 0;
@@ -234,6 +225,10 @@ void displayTick() {
 }
 
 extern "C" void app_main(void) {
+	// Settings
+	settings.setup();
+	settings.read();
+
 	// Display
 	display.setup();
 	renderer.setTarget(&display);
@@ -241,13 +236,13 @@ extern "C" void app_main(void) {
 	// Motor
 	motor.setup();
 
+	motor.setMinPulseWidth(settings.minPulseWidth);
 	updatePulseWidthRange();
 	updatePercent();
 
 	// Encoder
 	encoder.setup();
 
-	// ReSharper disable once CppDFAEndlessLoop
 	while (true) {
 		encoderTick();
 		displayTick();
