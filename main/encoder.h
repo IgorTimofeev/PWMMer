@@ -1,12 +1,13 @@
 #pragma once
 
+#include <esp_timer.h>
 #include "driver/gpio.h"
 
 class Encoder {
 	public:
-		Encoder(const gpio_num_t& clkPin, const gpio_num_t& dtPin, const gpio_num_t& swPin) :
-			_clkPin(clkPin),
-			_dtPin(dtPin),
+		Encoder(const gpio_num_t& aPin, const gpio_num_t& bPin, const gpio_num_t& swPin) :
+			_clkPin(aPin),
+			_dtPin(bPin),
 			_swPin(swPin)
 		{
 
@@ -23,47 +24,50 @@ class Encoder {
 
 			gpio_install_isr_service(0);
 
-			gpio_isr_handler_add(_clkPin, onClkOrDtInterrupt, this);
-			gpio_isr_handler_add(_dtPin, onClkOrDtInterrupt, this);
-			gpio_isr_handler_add(_swPin, onSwInterrupt, this);
+			gpio_isr_handler_add(_clkPin, onRotationPinsInterrupt, this);
+			gpio_isr_handler_add(_dtPin, onRotationPinsInterrupt, this);
+			gpio_isr_handler_add(_swPin, onSwitchPinInterrupt, this);
 
 			// Updating initial values
 			_pressed = readSw();
-			_oldClkAndDt = readClkAndDt();
+			_oldABMask = readABMask();
 		}
 
-		static void onClkOrDtInterrupt(void* arg) {
+		static void onRotationPinsInterrupt(void* arg) {
 			const auto encoder = static_cast<Encoder*>(arg);
 
-			encoder->readRotation();
-			encoder->_interrupted = true;
+			encoder->updateRotation();
 		}
 
-		static void onSwInterrupt(void* arg) {
+		static void onSwitchPinInterrupt(void* arg) {
 			const auto encoder = static_cast<Encoder*>(arg);
 
 			encoder->readPressed();
-			encoder->_interrupted = true;
 		}
 
-		bool wasInterrupted() const {
-			return _interrupted;
+		bool isPressedChanged() {
+			return _pressed != _oldPressed;
 		}
 
-		void acknowledgeInterrupt() {
-			_interrupted = false;
-		}
+		bool fetchPressed() {
+			_oldPressed = _pressed;
 
-		bool isPressed() const {
 			return _pressed;
 		}
 
-		int16_t getRotation() const {
+		int16_t getRotation() {
 			return _rotation;
 		}
 
-		void setRotation(int16_t value) {
-			_rotation = value;
+		int16_t fetchRPS() {
+			const auto rps = _rotation * 1'000'000 / (esp_timer_get_time() - _oldRotationTime);
+
+			ESP_LOGI("Encoder", "Rotation: %d, rps: %d", _rotation, rps);
+
+			_rotation = 0;
+			_oldRotationTime = esp_timer_get_time();
+
+			return rps;
 		}
 
 	private:
@@ -72,12 +76,14 @@ class Encoder {
 			_dtPin,
 			_swPin;
 
-		int16_t _rotation = 0;
+		bool _oldPressed = false;
 		bool _pressed = false;
-		bool _interrupted = false;
-		uint8_t _oldClkAndDt = 0;
 
-		uint8_t readClkAndDt() const {
+		uint8_t _oldABMask = 0;
+		int16_t _rotation = 0;
+		int64_t _oldRotationTime = 0;
+
+		uint8_t readABMask() const {
 			return (gpio_get_level(_clkPin) << 1) | gpio_get_level(_dtPin);
 		}
 
@@ -89,11 +95,11 @@ class Encoder {
 			_pressed = readSw();
 		}
 
-		void readRotation() {
-			const auto clkAndDt = readClkAndDt();
+		void updateRotation() {
+			const auto ABMask = readABMask();
 
-			if (clkAndDt != _oldClkAndDt) {
-				switch (_oldClkAndDt | (clkAndDt << 2)) {
+			if (ABMask != _oldABMask) {
+				switch (_oldABMask | (ABMask << 2)) {
 					case 0: case 5: case 10: case 15:
 						break;
 					case 1: case 7: case 8: case 14:
@@ -110,7 +116,7 @@ class Encoder {
 						break;
 				}
 
-				_oldClkAndDt = clkAndDt;
+				_oldABMask = ABMask;
 			}
 		}
 };

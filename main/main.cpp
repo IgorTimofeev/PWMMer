@@ -64,26 +64,17 @@ void updateMaxPulseWidth() {
 }
 
 void encoderTick() {
-	if (!encoder.wasInterrupted())
-		return;
-
-	encoder.acknowledgeInterrupt();
-
-	if (encoder.isPressed()) {
+	if (encoder.isPressedChanged() && encoder.fetchPressed()) {
 		modeMode = !modeMode;
 		display.setInverted(modeMode);
 	}
-	else {
-		const auto absRotation = std::abs(encoder.getRotation());
 
-		if (absRotation < 4)
-			return;
-
-//		ESP_LOGI("Main", "Rotation: %d", encoder.getRotation());
+	if (std::abs(encoder.getRotation()) >= 4) {
+		const auto rps = encoder.fetchRPS();
 
 		if (modeMode) {
 			settings.mode = static_cast<SettingsMode>(std::clamp<int8_t>(
-				static_cast<int8_t>(settings.mode) + (encoder.getRotation() > 0 ? 1 : -1),
+				static_cast<int8_t>(settings.mode) + (rps > 0 ? 1 : -1),
 				0,
 				static_cast<int8_t>(SettingsMode::last)
 			));
@@ -93,14 +84,14 @@ void encoderTick() {
 			ESP_LOGI("Main", "Mode: %d", static_cast<int8_t>(settings.mode));
 		}
 		else {
-			const auto magnitudeBig = absRotation >= 5;
+			const auto magnitudeBig = std::abs(rps) >= 70;
 
 			switch (settings.mode) {
 				case SettingsMode::pulseWidth: {
 					const auto magnitude = magnitudeBig ? 50 : 10;
 
 					pulseWidth = static_cast<uint16_t>(std::clamp<int32_t>(
-						static_cast<int32_t>(pulseWidth + (encoder.getRotation() > 0 ? magnitude : -magnitude)),
+						static_cast<int32_t>(pulseWidth + (rps > 0 ? magnitude : -magnitude)),
 						settings.minPulseWidth,
 						motor.getMaxPulseWidth()
 					));
@@ -115,7 +106,7 @@ void encoderTick() {
 					const auto magnitude = magnitudeBig ? 5 : 1;
 
 					percent = static_cast<uint8_t>(std::clamp<int16_t>(
-						static_cast<int16_t>(percent + (encoder.getRotation() > 0 ? magnitude : -magnitude)),
+						static_cast<int16_t>(percent + (rps > 0 ? magnitude : -magnitude)),
 						0,
 						100
 					));
@@ -130,7 +121,7 @@ void encoderTick() {
 					const auto magnitude = magnitudeBig ? 50 : 10;
 
 					settings.minPulseWidth = static_cast<uint16_t>(std::clamp<int32_t>(
-						static_cast<int32_t>(settings.minPulseWidth) + (encoder.getRotation() > 0 ? magnitude : -magnitude),
+						static_cast<int32_t>(settings.minPulseWidth) + (rps > 0 ? magnitude : -magnitude),
 						10,
 						1500 - 10
 					));
@@ -147,8 +138,6 @@ void encoderTick() {
 				}
 			}
 		}
-
-		encoder.setRotation(0);
 	}
 }
 
@@ -161,7 +150,8 @@ void displayTick() {
 	uint16_t unitsStep1;
 	uint16_t unitsStep2;
 	uint16_t unitsValue;
-	float radPerUnit;
+	uint16_t unitsAngleDegMax;
+
 	std::wstring modeText;
 
 	switch (settings.mode) {
@@ -173,9 +163,9 @@ void displayTick() {
 			unitsStep0 = 10;
 			unitsStep1 = 50;
 			unitsStep2 = 100;
-			radPerUnit = toRadians(0.2f);
+			unitsAngleDegMax = 200;
 
-			modeText = L"Pulse width";
+			modeText = L"Pulse";
 
 			break;
 		}
@@ -187,7 +177,7 @@ void displayTick() {
 			unitsStep0 = 1;
 			unitsStep1 = 5;
 			unitsStep2 = 10;
-			radPerUnit = toRadians(1.5f);
+			unitsAngleDegMax = 180;
 
 			modeText = L"Percent";
 
@@ -201,13 +191,15 @@ void displayTick() {
 			unitsStep0 = 10;
 			unitsStep1 = 50;
 			unitsStep2 = 100;
-			radPerUnit = toRadians(0.2f);
+			unitsAngleDegMax = 270;
 
-			modeText = L"Range min";
+			modeText = L"Range";
 
 			break;
 		}
 	}
+
+	const auto radPerUnit = 2 * std::numbers::pi_v<float> * unitsAngleDegMax / 360 / static_cast<float>(unitsMax - unitsMin);;
 
 	renderer.clear(&colorB);
 
@@ -258,7 +250,7 @@ void displayTick() {
 			if (isBig) {
 				const auto text = std::to_wstring(arrowUnits);
 				const auto textSizeVec = Vector2F(fontBig.getWidth(text), fontBig.getHeight());
-				const auto textMargin = 2;
+				const auto textMargin = 0;
 				const auto textVec = arrowVecFrom - arrowVecNorm * (textSizeVec.getLength() / 2 + textMargin);
 
 				renderer.renderString(
@@ -366,10 +358,8 @@ extern "C" void app_main(void) {
 	renderer.setTarget(&display);
 
 	// Calibration
-	if (encoder.isPressed()) {
+	if (encoder.fetchPressed()) {
 		calibrate();
-
-		encoder.acknowledgeInterrupt();
 	}
 	else {
 		pulseWidth = settings.minPulseWidth;
