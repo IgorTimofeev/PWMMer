@@ -25,8 +25,8 @@ namespace pizda {
 			class encoder {
 				public:
 					constexpr static gpio_num_t sw = GPIO_NUM_0;
-					constexpr static gpio_num_t slk = GPIO_NUM_1;
-					constexpr static gpio_num_t dt = GPIO_NUM_2;
+					constexpr static gpio_num_t a = GPIO_NUM_1;
+					constexpr static gpio_num_t b = GPIO_NUM_2;
 			};
 
 			constexpr static gpio_num_t signal = GPIO_NUM_3;

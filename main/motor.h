@@ -6,15 +6,15 @@ namespace pizda {
 			Motor(
 				const gpio_num_t pin,
 				const ledc_channel_t channel,
+				const uint16_t frequencyHz = 50,
 				const uint16_t minPulseWidthUs = 1000,
-				const uint16_t maxPulseWidthUs = 2000,
-				const uint16_t frequencyHz = 50
+				const uint16_t maxPulseWidthUs = 2000
 			) :
-				pin(pin),
-				channel(channel),
-				minPulseWidthUs(minPulseWidthUs),
-				maxPulseWidthUs(maxPulseWidthUs),
-				frequencyHz(frequencyHz)
+				_pin(pin),
+				_channel(channel),
+				_frequencyHz(frequencyHz),
+				_minPulseWidthUs(minPulseWidthUs),
+				_maxPulseWidthUs(maxPulseWidthUs)
 			{
 
 			}
@@ -22,69 +22,69 @@ namespace pizda {
 			void setup() const {
 				ledc_timer_config_t timerConfig {};
 				timerConfig.speed_mode       = LEDC_LOW_SPEED_MODE;
-				timerConfig.duty_resolution  = dutyResolution;
+				timerConfig.duty_resolution  = _dutyResolution;
 				timerConfig.timer_num        = LEDC_TIMER_0;
-				timerConfig.freq_hz          = frequencyHz;
+				timerConfig.freq_hz          = _frequencyHz;
 				timerConfig.clk_cfg          = LEDC_AUTO_CLK;
 				ESP_ERROR_CHECK(ledc_timer_config(&timerConfig));
 
 				ledc_channel_config_t channelConfig {};
 				channelConfig.speed_mode     = LEDC_LOW_SPEED_MODE;
-				channelConfig.channel        = channel;
+				channelConfig.channel        = _channel;
 				channelConfig.timer_sel      = LEDC_TIMER_0;
 				channelConfig.intr_type      = LEDC_INTR_DISABLE;
-				channelConfig.gpio_num       = pin;
+				channelConfig.gpio_num       = _pin;
 				channelConfig.duty           = 0;
 				channelConfig.hpoint         = 0;
 				ESP_ERROR_CHECK(ledc_channel_config(&channelConfig));
 			}
 
 			uint16_t getMinPulseWidth() const {
-				return minPulseWidthUs;
+				return _minPulseWidthUs;
 			}
 
 			void setMinPulseWidth(const uint16_t minPulseWidthUs) {
-				this->minPulseWidthUs = minPulseWidthUs;
+				this->_minPulseWidthUs = minPulseWidthUs;
 			}
 
 			uint16_t getMaxPulseWidth() const {
-				return maxPulseWidthUs;
+				return _maxPulseWidthUs;
 			}
 
 			void setMaxPulseWidth(const uint16_t maxPulseWidthUs) {
-				this->maxPulseWidthUs = maxPulseWidthUs;
+				this->_maxPulseWidthUs = maxPulseWidthUs;
 			}
 
 			uint16_t getFrequency() const {
-				return frequencyHz;
+				return _frequencyHz;
 			}
 
 			void setFrequency(const uint16_t frequencyHz) {
-				this->frequencyHz = frequencyHz;
+				this->_frequencyHz = frequencyHz;
 			}
 
 			void setPulseWidth(const uint16_t valueUs) const {
-				const auto duty = valueUs * dutyResolutionMaxValue / (1'000'000 / frequencyHz);
+				const auto dutyResolutionMaxValue = static_cast<uint16_t>(std::pow(2, static_cast<uint8_t>(_dutyResolution))) - 1;
+				const auto duty = valueUs * dutyResolutionMaxValue / (1'000'000 / _frequencyHz);
 
-				// ESP_LOGI("Motor", "setPulse() duty: %f", (float) duty);
+				ESP_LOGI("Motor", "setPulse() us: %f, duty: %f", (float) valueUs, (float) duty);
 
-				ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
-				ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
+				ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, _channel, duty));
+				ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, _channel));
 			}
 
 			void setPercent(const uint8_t percent) const {
-				setPulseWidth(minPulseWidthUs + (maxPulseWidthUs - minPulseWidthUs) * percent / 100);
+				setPulseWidth(_minPulseWidthUs + (_maxPulseWidthUs - _minPulseWidthUs) * percent / 100);
 			}
 
 		private:
-			gpio_num_t pin;
-			ledc_channel_t channel;
-			uint16_t minPulseWidthUs;
-			uint16_t maxPulseWidthUs;
-			uint16_t frequencyHz;
+			gpio_num_t _pin;
+			ledc_channel_t _channel;
+			uint16_t _frequencyHz;
+			uint16_t _minPulseWidthUs;
+			uint16_t _maxPulseWidthUs;
 
-			constexpr static ledc_timer_bit_t dutyResolution = LEDC_TIMER_13_BIT;
-			constexpr static uint16_t dutyResolutionMaxValue = static_cast<uint16_t>(std::pow(2, static_cast<uint8_t>(dutyResolution))) - 1;
+			constexpr static ledc_timer_bit_t _dutyResolution = LEDC_TIMER_13_BIT;
 	};
 
 	class Servo : public Motor {
@@ -104,21 +104,21 @@ namespace pizda {
 					maxPulseWidthUs,
 					frequencyHz
 				),
-				maxAngle(maxAngle)
+				_maxAngle(maxAngle)
 			{
 
 			}
 
 			uint16_t getMaxAngle() const {
-				return maxAngle;
+				return _maxAngle;
 			}
 
 			void setMaxAngle(const uint16_t maxAngle) {
-				this->maxAngle = maxAngle;
+				this->_maxAngle = maxAngle;
 			}
 
 			void setAngle(const uint16_t angle) const {
-				const auto pulse = getMinPulseWidth() + (getMaxPulseWidth() - getMinPulseWidth()) * angle / maxAngle;
+				const auto pulse = getMinPulseWidth() + (getMaxPulseWidth() - getMinPulseWidth()) * angle / _maxAngle;
 
 				// ESP_LOGI("Motor", "setAngle() pulse: %f", (float) pulse);
 
@@ -126,6 +126,6 @@ namespace pizda {
 			}
 
 		private:
-			uint16_t maxAngle;
+			uint16_t _maxAngle;
 	};
 }
